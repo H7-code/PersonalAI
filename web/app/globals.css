@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-radial: #f8fafc;
+  }
+}
+
+.bg-radial-luminous {
+  background-color: #f8fafc;
+  background-image: 
+    radial-gradient(circle at 50% 32%, rgba(16, 185, 129, 0.08) 0%, rgba(52, 211, 153, 0.03) 38%, transparent 68%),
+    radial-gradient(circle at 85% 15%, rgba(16, 185, 129, 0.04) 0%, transparent 45%);
+}
+
+.orb-halo-shadow {
+  box-shadow: 
+    0 0 0 1px rgba(16, 185, 129, 0.08),
+    0 20px 50px -12px rgba(16, 185, 129, 0.16),
+    0 4px 16px -2px rgba(15, 23, 42, 0.04);
+}
+
+.mic-button-halo {
+  box-shadow: 
+    0 0 0 8px rgba(16, 185, 129, 0.08),
+    0 0 0 16px rgba(16, 185, 129, 0.04),
+    0 14px 28px -6px rgba(5, 150, 105, 0.35);
+}
+
+.mic-button-halo-listening {
+  box-shadow: 
+    0 0 0 10px rgba(16, 185, 129, 0.20),
+    0 0 0 22px rgba(16, 185, 129, 0.10),
+    0 16px 36px -6px rgba(5, 150, 105, 0.50);
+}
+
+.mic-button-halo-interrupted {
+  box-shadow: 
+    0 0 0 10px rgba(244, 63, 94, 0.20),
+    0 0 0 20px rgba(244, 63, 94, 0.10),
+    0 16px 36px -6px rgba(225, 29, 72, 0.50);
+}
+
+@keyframes pulseSubtle {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.03); opacity: 0.85; }
+}
+
+@keyframes waveHeight {
+  0% { transform: scaleY(0.4); }
+  100% { transform: scaleY(1.15); }
+}
+
+.animate-pulse-subtle {
+  animation: pulseSubtle 3s ease-in-out infinite;
+}
+
+.animate-wave-bar {
+  animation: waveHeight 1.4s ease-in-out infinite alternate;
+}

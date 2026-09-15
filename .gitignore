@@ -1,0 +1,38 @@
+# Local dependencies and caches
+web/node_modules/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Downloaded runtime models and binaries
+models/
+downloads/
+
+# Generated audio and benchmark output
+logs/
+phase1_outputs/
+phase2_outputs/
+reports/
+**/wav/
+**/wav_optimized/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+web/.next/
+web/out/
+web/build/
+web/coverage/
+web/*.tsbuildinfo

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARIA — Adaptive Real-time Intelligent Assistant</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Header & Live State Badge -->
+  <header>
+    <div class="logo-group">
+      <div class="logo-glow"></div>
+      <h1>ARIA <span style="font-size: 0.8rem; font-weight: 500; color: var(--text-muted);">V3.0</span></h1>
+    </div>
+
+    <div class="badge" id="status-badge">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">INITIALIZING</span>
+    </div>
+  </header>
+
+  <!-- Main Grid Layout -->
+  <main>
+    <!-- Left: Conversational Feed & PTT Controls -->
+    <section class="conversation-panel">
+      <div class="conversation-feed" id="conversation-feed">
+        <div class="message-card message-assistant">
+          <div class="message-body">
+            Hello! I am ARIA, your offline voice assistant. You can speak to me in English, Roman Urdu, or Minglish. Press and hold Spacebar or click the button below to speak.
+          </div>
+          <div class="message-meta">System Ready</div>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="control-bar">
+        <button id="ptt-btn" class="ptt-btn" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+          </svg>
+          <span id="ptt-label">Hold [Space] or Click to Speak</span>
+        </button>
+
+        <button id="cancel-btn" class="cancel-btn" type="button" title="Cancel Active Response (Esc)">
+          Barge-In (Esc)
+        </button>
+      </div>
+    </section>
+
+    <!-- Right: Telemetry & Status HUD -->
+    <aside class="sidebar">
+      <div class="hud-card">
+        <div class="hud-title">Turn Telemetry</div>
+        <div class="metric-row">
+          <span class="metric-label">Pipeline State</span>
+          <span class="metric-value" id="hud-state">INITIALIZING</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Active Request</span>
+          <span class="metric-value" id="hud-request-id">#0</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Routed Language</span>
+          <span class="metric-value" id="hud-lang">NONE</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Perceived TTFT</span>
+          <span class="metric-value" id="hud-ttft">-- ms</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Echo Gate</span>
+          <span class="metric-value" id="hud-echo-gate" style="color: var(--accent-emerald);">OPEN</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">WS Latency</span>
+          <span class="metric-value" id="hud-latency">-- ms</span>
+        </div>
+      </div>
+
+      <div class="hud-card">
+        <div class="hud-title">System Architecture</div>
+        <div class="metric-row">
+          <span class="metric-label">STT</span>
+          <span class="metric-value">Whisper tiny (CPU)</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">LLM</span>
+          <span class="metric-value">DeepSeek-R1 1.5B (GPU)</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">EN TTS</span>
+          <span class="metric-value">Piper Lessac (CPU)</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">UR TTS</span>
+          <span class="metric-value">MMS-TTS Latin (CPU)</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Mode</span>
+          <span class="metric-value" style="color: var(--accent-emerald);">100% Offline</span>
+        </div>
+      </div>
+
+      <div class="key-hint">
+        Tip: Press <kbd>Space</kbd> to talk • Press <kbd>Esc</kbd> to interrupt
+      </div>
+    </aside>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
