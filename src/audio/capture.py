@@ -95,7 +95,14 @@ class AudioCaptureManager:
                 break
         if wasapi_api_idx is None:
             return None
-        return hostapis[wasapi_api_idx].get("default_input_device")
+        default_input = hostapis[wasapi_api_idx].get("default_input_device")
+        if isinstance(default_input, int) and default_input >= 0:
+            return default_input
+
+        for index, device in enumerate(sd.query_devices()):
+            if device.get("hostapi") == wasapi_api_idx and device.get("max_input_channels", 0) > 0:
+                return index
+        return None
 
     def _detect_device_config(self, device: Optional[int]) -> Tuple[int, int, bool]:
         """
@@ -172,16 +179,44 @@ class AudioCaptureManager:
         if self.stream is not None and self.stream.active:
             return
 
-        self.stream = sd.InputStream(
-            device=self.device,
-            channels=1,
-            samplerate=self.native_rate,
-            blocksize=self.hardware_blocksize,
-            dtype="float32",
-            latency=self.latency,
-            callback=self._audio_callback,
-        )
-        self.stream.start()
+        devices_to_try = [self.device]
+        default_input = sd.default.device[0]
+        if isinstance(default_input, int) and default_input >= 0 and default_input not in devices_to_try:
+            devices_to_try.append(default_input)
+        try:
+            for info in self.list_input_devices():
+                device_index = info["index"]
+                if device_index not in devices_to_try:
+                    devices_to_try.append(device_index)
+        except Exception as exc:
+            logger.warning(f"Could not enumerate fallback input devices: {exc}")
+
+        last_error = None
+        for device in devices_to_try:
+            stream = None
+            try:
+                stream = sd.InputStream(
+                    device=device,
+                    channels=1,
+                    samplerate=self.native_rate,
+                    blocksize=self.hardware_blocksize,
+                    dtype="float32",
+                    latency=self.latency,
+                    callback=self._audio_callback,
+                )
+                stream.start()
+                self.stream = stream
+                self.device = device
+                break
+            except Exception as exc:
+                last_error = exc
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+        else:
+            raise last_error
+
         logger.info(
             f"Audio stream started on device {self.device} at {self.native_rate} Hz, "
             f"blocksize={self.hardware_blocksize}, latency={self.latency}, needs_resample={self.needs_resample}"

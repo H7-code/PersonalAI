@@ -30,8 +30,14 @@ export function useAriaVoice(): AriaVoiceHook {
 
   const wsRef = useRef<WebSocket | null>(null);
   const isSpacePressed = useRef<boolean>(false);
+  const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isUnmountedRef = useRef<boolean>(false);
+  const connectWsRef = useRef<(() => void) | null>(null);
 
   const connectWs = useCallback(() => {
+    if (isUnmountedRef.current) return;
+
     try {
       const ws = new WebSocket("ws://127.0.0.1:8000/ws");
       wsRef.current = ws;
@@ -78,12 +84,17 @@ export function useAriaVoice(): AriaVoiceHook {
       };
 
       ws.onclose = () => {
+        if (wsRef.current !== ws || isUnmountedRef.current) return;
         setIsConnected(false);
         wsRef.current = null;
-        setTimeout(connectWs, 2000);
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = null;
+          connectWsRef.current?.();
+        }, 2000);
       };
 
       ws.onerror = (err) => {
+        if (wsRef.current !== ws || isUnmountedRef.current) return;
         console.warn("[ARIA UI] WebSocket error:", err);
       };
     } catch (e) {
@@ -92,8 +103,23 @@ export function useAriaVoice(): AriaVoiceHook {
   }, []);
 
   useEffect(() => {
-    connectWs();
+    isUnmountedRef.current = false;
+    connectWsRef.current = connectWs;
+    connectTimeoutRef.current = setTimeout(() => {
+      connectTimeoutRef.current = null;
+      connectWs();
+    }, 0);
     return () => {
+      isUnmountedRef.current = true;
+      connectWsRef.current = null;
+      if (connectTimeoutRef.current) {
+        clearTimeout(connectTimeoutRef.current);
+        connectTimeoutRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
       if (wsRef.current) wsRef.current.close();
     };
   }, [connectWs]);
@@ -108,7 +134,6 @@ export function useAriaVoice(): AriaVoiceHook {
 
   const stopPtt = useCallback(() => {
     setIsPttActive(false);
-    setState("TRANSCRIBING");
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "ptt_stop" }));
     }
