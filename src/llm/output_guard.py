@@ -65,6 +65,7 @@ def strip_markdown(text: str, preserve_leading_space: bool = False) -> str:
             Use for streaming chunks where the space is a word boundary.
     """
     leading_space = text.startswith(' ') and preserve_leading_space
+    trailing_space = text.endswith(' ') and preserve_leading_space
     text = CODE_BLOCK_RE.sub("", text)
     text = INLINE_CODE_RE.sub("", text)
     text = URL_RE.sub("", text)
@@ -72,8 +73,11 @@ def strip_markdown(text: str, preserve_leading_space: bool = False) -> str:
     # Collapse multiple spaces
     text = re.sub(r'[ \t]+', ' ', text)
     text = text.strip()
-    if leading_space and text:
-        text = ' ' + text
+    if text:
+        if leading_space:
+            text = ' ' + text
+        if trailing_space:
+            text += ' '
     return text
 
 

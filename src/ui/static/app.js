@@ -24,6 +24,7 @@
 
   const STATE_COLORS = {
     INITIALIZING: "#64748b",
+    WARMING: "#f59e0b",
     IDLE: "#64748b",
     LISTENING: "#10b981",
     PROCESSING_STT: "#f59e0b",

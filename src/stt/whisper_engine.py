@@ -42,12 +42,15 @@ class WhisperEngine:
         cpu_threads: int = 4,
         compute_type: str = "int8",
         beam_size: int = 1,
+        fallback_model_size: Optional[str] = None,
     ):
         self.model_size = model_size
         self.download_root = str(Path(download_root))
         self.cpu_threads = cpu_threads
         self.beam_size = beam_size
         self.compute_type = compute_type
+        self.fallback_model_size = fallback_model_size
+        self._fallback_engine: Optional["WhisperEngine"] = None
 
         logger.info(f"Loading Production STT: Faster-Whisper '{self.model_size}' (INT8, CPU, threads={self.cpu_threads})...")
         t0 = time.perf_counter()
@@ -92,6 +95,51 @@ class WhisperEngine:
         raw_text = " ".join(s.text.strip() for s in segments).strip()
         latency_ms = (time.perf_counter() - t0) * 1000.0
 
+        audio_array = np.asarray(audio, dtype=np.float32) if isinstance(audio, np.ndarray) else None
+        rms = float(np.sqrt(np.mean(audio_array ** 2))) if audio_array is not None and audio_array.size else 0.0
+        peak = float(np.max(np.abs(audio_array))) if audio_array is not None and audio_array.size else 0.0
+        logger.info(
+            "STT raw boundary model=%s audio_duration_ms=%.1f sample_rate=16000 "
+            "channel_count=1 rms=%.6f peak=%.6f language=%s "
+            "language_probability=%.4f raw_text=%r",
+            self.model_size,
+            info.duration * 1000.0 if info.duration else 0.0,
+            rms,
+            peak,
+            info.language,
+            info.language_probability,
+            raw_text,
+        )
+
+        if self._should_use_fallback(info.language, info.language_probability, raw_text):
+            fallback = self._get_fallback_engine()
+            logger.info(
+                "STT fallback start primary_model=%s fallback_model=%s "
+                "language=%s language_probability=%.4f raw_text=%r",
+                self.model_size,
+                fallback.model_size,
+                info.language,
+                info.language_probability,
+                raw_text,
+            )
+            fallback_result = fallback.transcribe(
+                audio,
+                language=language,
+                initial_prompt=initial_prompt,
+                temperature=temperature,
+            )
+            logger.info(
+                "STT fallback result primary_model=%s fallback_model=%s "
+                "raw_text=%r language=%s language_probability=%.4f latency_ms=%.1f",
+                self.model_size,
+                fallback.model_size,
+                fallback_result.raw_text,
+                fallback_result.language,
+                fallback_result.language_probability,
+                fallback_result.latency_ms,
+            )
+            return fallback_result
+
         # Determine audio duration
         duration_ms = info.duration * 1000.0 if info.duration else 0.0
         if duration_ms == 0.0 and isinstance(audio, np.ndarray):
@@ -117,3 +165,22 @@ class WhisperEngine:
             rtf=rtf,
             transliterated=transliterated,
         )
+
+    def _should_use_fallback(self, language: str, probability: float, raw_text: str) -> bool:
+        """Retry non-English tiny decodes that commonly mislabel Roman Urdu; keep English fast."""
+        if not self.fallback_model_size or self.model_size == self.fallback_model_size:
+            return False
+        if not raw_text:
+            return False
+        return language not in {"en", "ur"}
+
+    def _get_fallback_engine(self) -> "WhisperEngine":
+        if self._fallback_engine is None:
+            self._fallback_engine = WhisperEngine(
+                self.fallback_model_size,
+                download_root=self.download_root,
+                cpu_threads=self.cpu_threads,
+                compute_type=self.compute_type,
+                beam_size=self.beam_size,
+            )
+        return self._fallback_engine

@@ -6,6 +6,7 @@ export type AriaState =
   | "IDLE"
   | "READY"
   | "LISTENING"
+  | "SIMULATING"
   | "TRANSCRIBING"
   | "THINKING"
   | "GENERATING"
@@ -42,6 +43,12 @@ const STATE_CONFIG: Record<
     dotColor: "bg-emerald-500",
     pingColor: "bg-emerald-400",
     textColor: "text-emerald-800",
+  },
+  SIMULATING: {
+    label: "SIMULATING",
+    dotColor: "bg-cyan-500",
+    pingColor: "bg-cyan-400",
+    textColor: "text-cyan-800",
   },
   TRANSCRIBING: {
     label: "TRANSCRIBING",

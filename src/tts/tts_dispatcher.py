@@ -15,6 +15,7 @@ Architecture constraints:
 """
 
 import time
+import logging
 from typing import Optional
 
 import numpy as np
@@ -28,6 +29,7 @@ LANG_URDU     = "urdu"
 LANG_MINGLISH = "minglish"
 
 _VALID_MODES = {LANG_ENGLISH, LANG_URDU, LANG_MINGLISH}
+logger = logging.getLogger("aria.tts.dispatcher")
 
 
 class TTSDispatcher:
@@ -96,10 +98,21 @@ class TTSDispatcher:
             )
 
         if lang_mode == LANG_ENGLISH:
-            return self._piper.synthesize(text)
+            pcm, sample_rate = self._piper.synthesize(text)
+            engine_name = "piper"
         else:
             # URDU and MINGLISH both use MMS Latin-script engine
-            return self._mms.synthesize(text)
+            pcm, sample_rate = self._mms.synthesize(text)
+            engine_name = "mms"
+        logger.info(
+            "TTS synthesized mode=%s engine=%s text=%r samples=%s sample_rate=%s",
+            lang_mode,
+            engine_name,
+            text,
+            len(pcm),
+            sample_rate,
+        )
+        return pcm, sample_rate
 
     def preload_english(self) -> float:
         """

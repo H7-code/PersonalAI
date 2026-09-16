@@ -9,6 +9,8 @@ export interface AriaVoiceHook {
   assistantText: string;
   speakingSentence: string;
   langMode: string;
+  selectedMode: string;
+  setSelectedMode: (mode: string) => void;
   latencyMs: number | null;
   isPttActive: boolean;
   isConnected: boolean;
@@ -24,6 +26,7 @@ export function useAriaVoice(): AriaVoiceHook {
   const [assistantText, setAssistantText] = useState<string>("");
   const [speakingSentence, setSpeakingSentence] = useState<string>("");
   const [langMode, setLangMode] = useState<string>("ENGLISH");
+  const [selectedMode, setSelectedMode] = useState<string>("auto");
   const [latencyMs, setLatencyMs] = useState<number | null>(142);
   const [isPttActive, setIsPttActive] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -128,9 +131,9 @@ export function useAriaVoice(): AriaVoiceHook {
     setIsPttActive(true);
     setState("LISTENING");
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "ptt_start" }));
+      wsRef.current.send(JSON.stringify({ type: "ptt_start", mode: selectedMode }));
     }
-  }, []);
+  }, [selectedMode]);
 
   const stopPtt = useCallback(() => {
     setIsPttActive(false);
@@ -197,6 +200,8 @@ export function useAriaVoice(): AriaVoiceHook {
     assistantText,
     speakingSentence,
     langMode,
+    selectedMode,
+    setSelectedMode,
     latencyMs,
     isPttActive,
     isConnected,

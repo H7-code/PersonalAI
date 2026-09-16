@@ -23,6 +23,7 @@ logger = logging.getLogger("ARIA.StateManager")
 
 class AppState(enum.Enum):
     INITIALIZING = "INITIALIZING"
+    WARMING = "WARMING"
     IDLE = "IDLE"
     LISTENING = "LISTENING"
     PROCESSING_STT = "PROCESSING_STT"
@@ -34,14 +35,15 @@ class AppState(enum.Enum):
 
 # Valid State Transition Matrix (ARIA V3 Section 25)
 VALID_TRANSITIONS: Dict[AppState, Set[AppState]] = {
-    AppState.INITIALIZING: {AppState.IDLE, AppState.ERROR},
-    AppState.IDLE: {AppState.LISTENING, AppState.ERROR},
+    AppState.INITIALIZING: {AppState.WARMING, AppState.IDLE, AppState.ERROR},
+    AppState.WARMING: {AppState.IDLE, AppState.LISTENING, AppState.ERROR},
+    AppState.IDLE: {AppState.WARMING, AppState.LISTENING, AppState.ERROR},
     AppState.LISTENING: {AppState.PROCESSING_STT, AppState.IDLE, AppState.CANCELLED, AppState.ERROR},
     AppState.PROCESSING_STT: {AppState.PROCESSING_LLM, AppState.IDLE, AppState.CANCELLED, AppState.ERROR},
     AppState.PROCESSING_LLM: {AppState.SPEAKING, AppState.IDLE, AppState.CANCELLED, AppState.ERROR},
     AppState.SPEAKING: {AppState.IDLE, AppState.LISTENING, AppState.CANCELLED, AppState.ERROR},
     AppState.CANCELLED: {AppState.IDLE, AppState.LISTENING, AppState.ERROR},
-    AppState.ERROR: {AppState.IDLE, AppState.INITIALIZING},
+    AppState.ERROR: {AppState.IDLE, AppState.INITIALIZING, AppState.WARMING},
 }
 
 

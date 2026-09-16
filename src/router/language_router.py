@@ -131,6 +131,26 @@ class LanguageRouter:
         tokens = re.findall(r"[a-z0-9\-_']+", clean_text)
         total_tokens = len(tokens)
 
+        has_salam_greeting = bool(re.search(r"\bass?alam(?:ualaikum|\s+(?:o\s+)?alaikum)\b|\bsalam\b", clean_text))
+        has_english_clause = bool(re.search(r"\b(?:how\s+are\s+you|hello|hi|hey)\b", clean_text))
+        if has_salam_greeting:
+            mode = LanguageMode.MINGLISH if has_english_clause else LanguageMode.URDU
+            dur_ms = (time.perf_counter() - t0) * 1000.0
+            return RoutingResult(
+                mode=mode,
+                confidence=0.98,
+                latency_ms=round(dur_ms, 3),
+                english_ratio=0.0,
+                urdu_ratio=1.0,
+                urdu_tokens_count=total_tokens,
+                english_tokens_count=0,
+                total_tokens_count=total_tokens,
+                matched_urdu_markers=["greeting"],
+                matched_english_words=[],
+                is_ambiguous_boundary=False,
+                fallback_reason=None,
+            )
+
         if total_tokens == 0:
             # Empty input fallback
             dur_ms = (time.perf_counter() - t0) * 1000.0
@@ -180,11 +200,25 @@ class LanguageRouter:
         english_ratio = english_count / total_tokens
 
         # Step 3: Calibrated Decision Logic
-        # Case A: Strict English (Zero Urdu markers and strong English presence/metadata)
-        if urdu_count == 0:
+        # Case A: Strict English only when text or reliable Whisper metadata supports it.
+        # Ambiguous non-English metadata must not silently become English.
+        if urdu_count == 0 and (
+            (whisper_lang == "en" and (whisper_prob is None or whisper_prob >= 0.60))
+            or (english_count > 0 and (whisper_lang in {None, "en"}))
+        ):
             mode = LanguageMode.ENGLISH
             confidence = max(0.85, english_ratio)
             fallback_reason = None
+
+        elif urdu_count == 0 and whisper_lang == "ur":
+            mode = LanguageMode.URDU
+            confidence = whisper_prob if whisper_prob is not None else 0.70
+            fallback_reason = "Whisper Urdu metadata"
+
+        elif urdu_count == 0:
+            mode = LanguageMode.MINGLISH
+            confidence = 0.55
+            fallback_reason = "Ambiguous language metadata"
 
         # Case B: Strict Roman Urdu (High Urdu marker density, minimal/no English vocabulary)
         elif urdu_ratio >= self.urdu_ratio_threshold and english_count == 0:

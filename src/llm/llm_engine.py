@@ -36,6 +36,8 @@ NUM_PREDICT       = 512         # internal LLM generation budget for DeepSeek-R1
 THINK_DISABLED    = True        # disable DeepSeek-R1 chain-of-thought (think:false)
 KEEP_ALIVE        = "10m"       # keep model hot in VRAM
 TIMEOUT_GENERATE  = 20          # V3 generation timeout (seconds)
+MODEL_WARMUP_TIMEOUT = 180      # overall cold start warm-up budget (seconds)
+MODEL_WARMUP_HTTP_TIMEOUT = 150 # one connected HTTP request for Ollama loading
 MAX_HISTORY_TURNS = 6           # bounded sliding window (user+assistant pairs)
 MIN_FREE_VRAM_MB  = 500         # headroom guard
 MAX_SENTENCES     = 3           # V3 max spoken sentences
@@ -53,6 +55,7 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         "4. Never output code blocks, URLs, or technical syntax unless specifically asked. "
         "5. Keep your tone warm, professional, and helpful. "
         "6. Do not include reasoning or planning text. Answer directly."
+        " Never answer in Spanish or another unrelated language."
     ),
     "urdu": (
         "Aap ARIA hain, aik intahai qabil, seedhi aur natural bolnay wali voice assistant. "
@@ -63,6 +66,7 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         "3. Jawab bohot mukhtasar hona chahiye: 1 se 2 jumlay (zyada se zyada 3 jumlay). "
         "4. Kisi qisam ki markdown, asterisks, bullets, ya headings ka istemal na karein. "
         "5. Seedha aur asan jawab dein. Koi sochne ya planning ka text shamil mat karen."
+        " Sirf Roman Urdu mein jawab dein, Spanish ya kisi unrelated zaban mein nahi."
     ),
     "minglish": (
         "Aap ARIA hain, aik natural Pakistani multilingual voice assistant. "
@@ -74,6 +78,7 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         "4. Arabic/Urdu script ka istemal SAKHT MANA HAI. Sirf Latin/English alphabet use karein. "
         "5. Jawab intehai mukhtasar rakhein (1 to 2 sentences, maximum 3 sentences). "
         "6. No markdown, no bullet points, no asterisks, no reasoning text."
+        " Sirf natural English aur Roman Urdu use karein, Spanish ya kisi unrelated zaban mein nahi."
     ),
 }
 _DEFAULT_SYSTEM = _SYSTEM_PROMPTS["english"]
@@ -148,6 +153,8 @@ class LLMEngine:
         # We store user+assistant pairs; max_turns*2 messages
         self._history: deque[dict] = deque(maxlen=self.max_turns * 2)
         self._lock = threading.Lock()
+        self._warmup_lock = threading.Lock()
+        self._warmup_complete = threading.Event()
 
     # ------------------------------------------------------------------
     # Connection & VRAM checks
@@ -174,6 +181,73 @@ class LLMEngine:
                 f"Available: {models}"
             )
         return data
+
+    def _model_status(self) -> Optional[dict]:
+        """Return Ollama's status blob for the configured model, if present."""
+        try:
+            data = _get_json(f"{self.base_url}/api/ps", timeout=10)
+        except Exception:
+            return None
+
+        for model in data.get("models", []):
+            name = model.get("name", "")
+            if self.model == name or self.model.split(":")[0] in name:
+                return model
+        return None
+
+    def is_model_loading(self) -> bool:
+        """True when Ollama is still warming or loading the model."""
+        status = self._model_status()
+        if status is None:
+            return False
+        state = str(status.get("status", "")).lower()
+        return state in {
+            "loading",
+            "pending",
+            "pulling",
+            "creating",
+            "starting",
+            "unpacking",
+            "warming",
+        }
+
+    def warmup(self, timeout_seconds: float = MODEL_WARMUP_TIMEOUT) -> bool:
+        """Keep one minimal Ollama request connected until the cold model load completes."""
+        if self._warmup_complete.is_set():
+            return True
+
+        with self._warmup_lock:
+            if self._warmup_complete.is_set():
+                return True
+
+            http_timeout = min(MODEL_WARMUP_HTTP_TIMEOUT, max(1.0, timeout_seconds))
+            payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": "warmup"}],
+                "stream": False,
+                "think": False,
+                "options": {"num_ctx": self.num_ctx, "num_predict": 1},
+                "keep_alive": self.keep_alive,
+            }
+            try:
+                _post_json(
+                    f"{self.base_url}/api/chat",
+                    payload,
+                    timeout=http_timeout,
+                )
+            except urllib.error.URLError as exc:
+                raise TimeoutError(
+                    f"Ollama cold-start warm-up failed for {self.model} "
+                    f"after {http_timeout:.1f}s"
+                ) from exc
+            self._warmup_complete.set()
+            return True
+
+    def ensure_ready_for_inference(self, warmup_timeout_seconds: float = MODEL_WARMUP_TIMEOUT) -> bool:
+        """Warm the model specifically for cold-start; once ready, normal generation timeout remains in force."""
+        if self._warmup_complete.is_set():
+            return True
+        return self.warmup(timeout_seconds=warmup_timeout_seconds)
 
     def check_vram_headroom(self) -> dict:
         """

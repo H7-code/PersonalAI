@@ -22,6 +22,8 @@ export default function Home() {
     assistantText,
     speakingSentence,
     langMode,
+    selectedMode,
+    setSelectedMode,
     latencyMs,
     isPttActive,
     isConnected,
@@ -88,7 +90,7 @@ export default function Home() {
             <button
               onClick={() =>
                 simulateTurn(
-                  "Analyze quarterly cloud cost anomalies and give recommendations.",
+                  "Hello",
                   "english"
                 )
               }
@@ -99,7 +101,7 @@ export default function Home() {
             <button
               onClick={() =>
                 simulateTurn(
-                  "Koshish karein ke mujhe server status ka pata chal jaye.",
+                  "Assalam o alaikum",
                   "urdu"
                 )
               }
@@ -151,6 +153,25 @@ export default function Home() {
               <div className="flex justify-between items-center">
                 <span>Operating Mode:</span>
                 <span className="font-semibold text-emerald-700">100% Offline Local</span>
+              </div>
+              <div className="space-y-2">
+                <span className="block">Conversation Language:</span>
+                <div className="grid grid-cols-4 gap-1">
+                  {["auto", "english", "urdu", "minglish"].map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setSelectedMode(mode)}
+                      className={`rounded border px-2 py-1 text-[10px] uppercase ${
+                        selectedMode === mode
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 bg-white text-slate-500"
+                      }`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
