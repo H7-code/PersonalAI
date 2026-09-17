@@ -1,6 +1,6 @@
 """
 ARIA Deterministic Language Router
-Classifies incoming transcripts into ENGLISH, URDU (Strict Roman Urdu), or MINGLISH (Code-switched).
+Classifies incoming transcripts into ENGLISH or URDU. English/Urdu mixed speech uses URDU mode.
 Execution latency strictly < 2 ms.
 """
 
@@ -18,7 +18,6 @@ logger = logging.getLogger("aria.router")
 class LanguageMode(str, enum.Enum):
     ENGLISH = "ENGLISH"
     URDU = "URDU"
-    MINGLISH = "MINGLISH"
 
 @dataclass
 class RoutingResult:
@@ -79,6 +78,7 @@ class LanguageRouter:
         "telemetry", "parameters", "normal", "processing", "moment", "percent", "megabytes", "dependency",
         "transformer", "neural", "pytorch", "tensorflow", "cuda", "api", "json", "http",
         "backup", "delete", "restore", "port", "summarize", "performance", "latest", "database",
+        "bye", "goodbye",
     }
 
     # Short Ambiguous Boundary Tokens
@@ -134,7 +134,7 @@ class LanguageRouter:
         has_salam_greeting = bool(re.search(r"\bass?alam(?:ualaikum|\s+(?:o\s+)?alaikum)\b|\bsalam\b", clean_text))
         has_english_clause = bool(re.search(r"\b(?:how\s+are\s+you|hello|hi|hey)\b", clean_text))
         if has_salam_greeting:
-            mode = LanguageMode.MINGLISH if has_english_clause else LanguageMode.URDU
+            mode = LanguageMode.URDU
             dur_ms = (time.perf_counter() - t0) * 1000.0
             return RoutingResult(
                 mode=mode,
@@ -216,7 +216,7 @@ class LanguageRouter:
             fallback_reason = "Whisper Urdu metadata"
 
         elif urdu_count == 0:
-            mode = LanguageMode.MINGLISH
+            mode = LanguageMode.URDU
             confidence = 0.55
             fallback_reason = "Ambiguous language metadata"
 
@@ -226,10 +226,9 @@ class LanguageRouter:
             confidence = min(0.98, urdu_ratio + 0.2)
             fallback_reason = None
 
-        # Case C: Minglish (Code-Switched Pakistani Urdu)
-        # Characteristic: Urdu syntactic/auxiliary markers + English nouns/verbs/technical terms
+        # Case C: English/Urdu mixed speech uses the Urdu response/TTS path.
         elif urdu_count > 0 and english_count > 0:
-            mode = LanguageMode.MINGLISH
+            mode = LanguageMode.URDU
             confidence = 0.90
             fallback_reason = None
 
@@ -240,7 +239,7 @@ class LanguageRouter:
                 mode = LanguageMode.URDU
                 confidence = 0.80
             else:
-                mode = LanguageMode.MINGLISH
+                mode = LanguageMode.URDU
                 confidence = 0.75
             fallback_reason = "Uncatalogued tokens with Urdu markers present"
 
@@ -251,7 +250,7 @@ class LanguageRouter:
             elif whisper_lang == "en":
                 mode = LanguageMode.ENGLISH
             else:
-                mode = LanguageMode.MINGLISH
+                mode = LanguageMode.URDU
             confidence = 0.65
             fallback_reason = "Whisper language metadata fallback"
 

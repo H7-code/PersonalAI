@@ -36,19 +36,19 @@ def detect_conversational_intent(text: str) -> Optional[IntentResponse]:
     ):
         return IntentResponse(
             "minglish_greeting",
-            LanguageMode.MINGLISH,
+            LanguageMode.URDU,
             "Wa alaikum assalam! Main theek hoon. How are you?",
         )
     if "yaar kya haal hai" in value:
         return IntentResponse(
             "minglish_wellbeing",
-            LanguageMode.MINGLISH,
+            LanguageMode.URDU,
             "Main theek hoon yaar. Aap batao?",
         )
     if re.search(r"\bhello\s+aria\b", value) and re.search(r"\bkya\s+kar\s+rahi\s+ho\b", value):
         return IntentResponse(
             "minglish_presence",
-            LanguageMode.MINGLISH,
+            LanguageMode.URDU,
             "Hello! Main yahan hoon aur aap ki help ke liye ready hoon.",
         )
 

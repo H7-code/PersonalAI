@@ -5,6 +5,7 @@ Implements runtime-derived thread allocation, initial prompt biasing, and Roman 
 
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,9 @@ class STTResult:
     latency_ms: float
     rtf: float
     transliterated: bool
+    accepted: bool = True
+    selected_language: str = ""
+    retry_used: bool = False
 
 class WhisperEngine:
     """
@@ -34,6 +38,8 @@ class WhisperEngine:
     """
 
     DEFAULT_INITIAL_PROMPT = None
+    ALLOWED_LANGUAGES = {"en", "ur"}
+    UNSUPPORTED_SCRIPT_RE = re.compile(r"[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0600-\u06FF]")
 
     def __init__(
         self,
@@ -140,6 +146,27 @@ class WhisperEngine:
             )
             return fallback_result
 
+        if not self._is_accepted(info.language, raw_text):
+            logger.warning(
+                "STT rejected model=%s detected_language=%s language_probability=%.4f "
+                "raw_text=%r; retrying forced en/ur",
+                self.model_size,
+                info.language,
+                info.language_probability,
+                raw_text,
+            )
+            candidates = []
+            for forced_language in ("en", "ur"):
+                retry = self._transcribe_forced(audio, forced_language, initial_prompt, temperature)
+                if retry is not None:
+                    candidates.append(retry)
+            accepted = [candidate for candidate in candidates if candidate.accepted]
+            if accepted:
+                best = max(accepted, key=lambda candidate: candidate.language_probability)
+                best.retry_used = True
+                return best
+            return self._rejected_result(audio, info, raw_text, latency_ms)
+
         # Determine audio duration
         duration_ms = info.duration * 1000.0 if info.duration else 0.0
         if duration_ms == 0.0 and isinstance(audio, np.ndarray):
@@ -164,6 +191,101 @@ class WhisperEngine:
             latency_ms=latency_ms,
             rtf=rtf,
             transliterated=transliterated,
+            accepted=True,
+            selected_language=info.language,
+            retry_used=False,
+        )
+
+    def _is_accepted(self, language: str, raw_text: str) -> bool:
+        return language in self.ALLOWED_LANGUAGES and not self.UNSUPPORTED_SCRIPT_RE.search(raw_text)
+
+    def _transcribe_forced(
+        self,
+        audio: Union[str, np.ndarray],
+        language: str,
+        initial_prompt: Optional[str],
+        temperature: float,
+    ) -> Optional[STTResult]:
+        if language not in self.ALLOWED_LANGUAGES:
+            return None
+        segments, info = self.model.transcribe(
+            audio,
+            beam_size=self.beam_size,
+            best_of=1,
+            language=language,
+            initial_prompt=initial_prompt,
+            temperature=temperature,
+            condition_on_previous_text=False,
+            word_timestamps=False,
+            no_speech_threshold=0.6,
+            vad_filter=False,
+        )
+        raw_text = " ".join(segment.text.strip() for segment in segments).strip()
+        accepted = self._is_accepted(language, raw_text)
+        logger.info(
+            "STT constrained retry model=%s selected_language=%s detected_language=%s "
+            "language_probability=%.4f raw_text=%r accepted=%s",
+            self.model_size,
+            language,
+            info.language,
+            info.language_probability,
+            raw_text,
+            accepted,
+        )
+        if not accepted:
+            return None
+        return self._build_result(audio, raw_text, language, float(info.language_probability), True)
+
+    def _build_result(
+        self,
+        audio: Union[str, np.ndarray],
+        raw_text: str,
+        language: str,
+        probability: float,
+        retry_used: bool,
+    ) -> STTResult:
+        duration_ms = len(audio) / 16.0 if isinstance(audio, np.ndarray) else 0.0
+        final_text = raw_text
+        transliterated = False
+        if is_perso_arabic(raw_text):
+            final_text = transliterate_to_roman_urdu(raw_text)
+            transliterated = True
+        return STTResult(
+            text=final_text,
+            raw_text=raw_text,
+            language=language,
+            language_probability=probability,
+            duration_ms=duration_ms,
+            latency_ms=0.0,
+            rtf=0.0,
+            transliterated=transliterated,
+            accepted=True,
+            selected_language=language,
+            retry_used=retry_used,
+        )
+
+    def _rejected_result(self, audio, info, raw_text: str, latency_ms: float) -> STTResult:
+        duration_ms = info.duration * 1000.0 if info.duration else (len(audio) / 16.0 if isinstance(audio, np.ndarray) else 0.0)
+        logger.warning(
+            "STT rejected model=%s detected_language=%s language_probability=%.4f "
+            "raw_text=%r accepted=false retry_used=true",
+            self.model_size,
+            info.language,
+            info.language_probability,
+            raw_text,
+        )
+        return STTResult(
+            text="",
+            raw_text=raw_text,
+            language=info.language,
+            language_probability=float(info.language_probability),
+            duration_ms=duration_ms,
+            latency_ms=latency_ms,
+            rtf=(latency_ms / duration_ms) if duration_ms else 0.0,
+            transliterated=False,
+            accepted=False,
+            selected_language="",
+            retry_used=True,
         )
 
     def _should_use_fallback(self, language: str, probability: float, raw_text: str) -> bool:

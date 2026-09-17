@@ -4,8 +4,7 @@ Routes synthesize requests to the correct engine based on lang_mode.
 
 Language modes:
   "english"  -> PiperEngine  (en_US-lessac-medium, 22050 Hz)
-  "urdu"     -> MMSEngine    (mms-tts-urd-script_latin, 16000 Hz)
-  "minglish" -> MMSEngine    (mms-tts-urd-script_latin, 16000 Hz)
+    "urdu"     -> MMSEngine    (mms-tts-urd-script_latin, 16000 Hz)
 
 Architecture constraints:
   - Both engines run CPU-only (0 VRAM)
@@ -26,10 +25,38 @@ from src.tts.mms_engine import MMSEngine
 # Canonical language mode strings (matches src/router output)
 LANG_ENGLISH  = "english"
 LANG_URDU     = "urdu"
-LANG_MINGLISH = "minglish"
 
-_VALID_MODES = {LANG_ENGLISH, LANG_URDU, LANG_MINGLISH}
+_VALID_MODES = {LANG_ENGLISH, LANG_URDU}
 logger = logging.getLogger("aria.tts.dispatcher")
+MMS_TARGET_RMS = 0.14
+PCM_PEAK_LIMIT = 0.95
+
+
+def _normalize_mms_pcm(pcm: np.ndarray) -> np.ndarray:
+    """Raise quiet MMS speech toward Piper loudness without exceeding safe headroom."""
+    waveform = np.asarray(pcm, dtype=np.float32)
+    if waveform.size == 0:
+        return waveform
+    before_peak = float(np.max(np.abs(waveform)))
+    before_rms = float(np.sqrt(np.mean(waveform * waveform)))
+    if before_rms <= 1e-6:
+        return waveform
+    gain = MMS_TARGET_RMS / before_rms
+    if before_peak * gain > PCM_PEAK_LIMIT:
+        gain = PCM_PEAK_LIMIT / before_peak
+    if gain <= 1.0:
+        return waveform
+    normalized = np.clip(waveform * gain, -PCM_PEAK_LIMIT, PCM_PEAK_LIMIT)
+    logger.info(
+        "MMS loudness normalization rms_before=%.6f peak_before=%.6f gain=%.3f "
+        "rms_after=%.6f peak_after=%.6f",
+        before_rms,
+        before_peak,
+        gain,
+        float(np.sqrt(np.mean(normalized * normalized))),
+        float(np.max(np.abs(normalized))),
+    )
+    return normalized
 
 
 class TTSDispatcher:
@@ -101,16 +128,21 @@ class TTSDispatcher:
             pcm, sample_rate = self._piper.synthesize(text)
             engine_name = "piper"
         else:
-            # URDU and MINGLISH both use MMS Latin-script engine
+            # Urdu and English/Urdu mixed speech use MMS Latin-script engine
             pcm, sample_rate = self._mms.synthesize(text)
+            pcm = _normalize_mms_pcm(pcm)
             engine_name = "mms"
         logger.info(
-            "TTS synthesized mode=%s engine=%s text=%r samples=%s sample_rate=%s",
+            "TTS synthesized mode=%s engine=%s text=%r samples=%s sample_rate=%s "
+            "dtype=%s rms=%.6f peak=%.6f",
             lang_mode,
             engine_name,
             text,
             len(pcm),
             sample_rate,
+            pcm.dtype,
+            float(np.sqrt(np.mean(pcm * pcm))) if len(pcm) else 0.0,
+            float(np.max(np.abs(pcm))) if len(pcm) else 0.0,
         )
         return pcm, sample_rate
 

@@ -2,7 +2,7 @@
 
 from src.tts.piper_engine import PiperEngine
 from src.tts.mms_engine import MMSEngine
-from src.tts.tts_dispatcher import TTSDispatcher, LANG_ENGLISH, LANG_URDU, LANG_MINGLISH
+from src.tts.tts_dispatcher import TTSDispatcher, LANG_ENGLISH, LANG_URDU
 
 __all__ = [
     "PiperEngine",
